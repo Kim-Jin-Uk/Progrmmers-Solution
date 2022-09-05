@@ -1,59 +1,79 @@
+// 함수형 프로그래밍으로 개선
+// KMP 알고리즘 적용
 function solution(m, musicinfos) {
-    // 리턴값, 시간 초기화
     let answer = '(None)'
-    let time = -1
-    // m을 배열로 변환
-    const mList = []
-    for(const char of m){
-        if(char === '#') mList[mList.length-1] = mList[mList.length-1] + '#'
-        else mList.push(char)
-    }
-    // 두 악보를 매치하는 함수
-    function matchMusic(m1,m2,title){
-        // 멜로디의 길이가 더짧다면 바로 리턴
-        if(m2.length < m1.length) return
-        // 배열을 순회하며 매치 체크
-        for(let start = 0; start <= m2.length - m1.length; start ++){
-            let check = true
-            for(let match = 0; match < m1.length; match ++){
-                if(m2[start+match] !== m1[match]){
-                    check = false
-                    break
-                }
-            }
-            if(check){
-                // 멜로디의 길이가 더 긴 경우에만 값 갱신
-                if(time < m2.length){
-                    answer = title
-                    time = m2.length
-                }
-                return
-            }
-        }
-    }
+    let maxTime = 0
+    // 멜로디 배열 변환 및 패턴 추출
+    const pattern = makeArrFor(m)
+    const prefixes = makeTableFor(pattern)
     
-    for(const musicInfo of musicinfos){
-        let [start,end,title,music] = musicInfo.split(',')
-        // 멜로디 재생시간 구하기
-        const [startH,startM] = start.split(':')
-        const [endH,endM] = end.split(':')
-        start = +startH*60 + +startM
-        end = +endH*60 + +endM
-        let musicTime = end-start
-        // 멜로디를 배열로 변환
-        const musicList = []
-        for(let idx = 0; idx < musicTime; idx++){
-            const i = idx % music.length
-            if(music[i] === '#'){
-                musicList[musicList.length-1] = musicList[musicList.length-1]+'#'
-                musicTime++
-            }else musicList.push(music[i])
+    musicinfos.forEach((info)=>{
+        const [start,end,title,datas] = info.split(',')
+        // 해당 곡의 플레이 타임, 플레이된 음표 추출
+        const playTime = getTimeFor(end) - getTimeFor(start)
+        let playDatas = makeArrFor(datas)
+        const len = playDatas.length
+        if(playTime > len){
+            for(let idx = 0; idx < playTime-len; idx++){
+                playDatas.push(playDatas[idx])
+            }
+        }else playDatas = playDatas.slice(0,playTime)
+        // 플레이 타임이 더 길고 매칭가능시 갱신
+        if(maxTime < playTime && isMatch(playDatas,pattern,prefixes)){
+            answer = title
+            maxTime = playTime
         }
-        // 마지막 글자가 #인경우 처리
-        if(music[(musicTime)%music.length] === '#')
-                musicList[musicList.length-1] = musicList[musicList.length-1]+'#'
-        // 매칭
-        matchMusic(mList,musicList,title)
-    }
+    })
     return answer
+}
+// 문자열을 시간으로 변환
+function getTimeFor(str){
+    const [H,M] = str.split(':')
+    return +H*60 + +M
+}
+// 문자열을 배열로 변환
+function makeArrFor(str){
+    let playDatas = []
+    let prevData = ''
+    for(let i = 0; i < str.length; i++){
+        const data = str[i]
+        if(data === '#'){
+            playDatas.push(prevData+data)
+            prevData = ''
+        }else if(prevData){
+            playDatas.push(prevData)
+            prevData = data
+        }else prevData += data
+    }
+    if(prevData) playDatas.push(prevData)
+    return playDatas
+}
+// 배열에서 패턴 추출
+function makeTableFor(arr) {
+    const table = new Array(arr.length)
+    let j = 0
+    table[0] = 0
+    for(let i = 1; i < arr.length; i++){
+        while (j > 0 && arr[i] !== arr[j]) j = table[j - 1]
+        if (arr[j] === arr[i])  j++
+        table[i] = j
+    }
+    return table
+}
+// KMP 알고리즘으로 매칭 확인
+function isMatch(data,pattern,prefixes){
+    if(data.length < pattern.length) return false
+    let [i,j] = [0,0]
+    while(i < data.length){
+        if(data[i] === pattern[j]){
+            i++
+            j++
+        }
+        if(j === pattern.length) return true
+        else if(data[i] !== pattern[j]){
+            if(j !== 0) j = prefixes[j-1]
+            else i++
+        }
+    }
+    return false
 }
