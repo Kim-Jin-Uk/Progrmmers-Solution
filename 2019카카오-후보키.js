@@ -1,48 +1,36 @@
 function solution(relation) {
-    const idxs = relation[0].length
-    const overlaps = []
-    
-    for(let len = 1; len <= idxs; len++){
-        check(len,[])
+    const PKs = {}
+    // 유일성 검증
+    function uniquenessDFS(idx,PKObj){
+        if(idx > relation[0].length) return
+        const isUnique = Object.keys(PKObj).length ? new Set(relation.map((a)=>a.filter((b,i)=>PKObj[i]).join())).size === relation.length : false
+        if(isUnique) PKs[Object.keys(PKObj).sort((a,b)=>a-b).join()] = true
+        uniquenessDFS(idx+1,PKObj)
+        const copy = {...PKObj}
+        copy[idx] = true
+        uniquenessDFS(idx+1,copy)
     }
-    
-    function check(length,ids){
-        if(ids.length === length){
-            checkoverlap(ids)
-        }else{
-            for(let i = 0; i < idxs; i++){
-                if(!ids.includes(i)){
-                    check(length,ids.concat([i]))
+    uniquenessDFS(0,{})
+    // 최소성 검증
+    while(true){
+        const keys = Object.keys(PKs).sort((a,b)=>a.length-b.length)
+        let isMinimality = true
+        keys.forEach((key,idx)=>{
+            const standard = new Array(relation[0].length).fill(false)
+            key.split(',').forEach((idx)=>{standard[idx] = true})
+            for(let i = idx+1; i < keys.length; i++){
+                const match = new Array(relation[0].length).fill(false)
+                keys[i].split(',').forEach((idx)=>{match[idx] = true})
+                let check = true
+                standard.forEach((v,i)=>{
+                    if(v && !match[i]) check = false
+                })
+                if(check){
+                    delete PKs[keys[i]]
+                    isMinimality = false
                 }
-            }   
-        }
-    }
-    
-    function checkoverlap(ids){
-        const overlap = []
-        for(const r of relation){
-            const row = r.filter((v,i) => ids.includes(i)).join(',')
-            if(overlap.includes(row)) return false
-            overlap.push(row)
-        }
-        const key = ids.sort((a,b)=>a-b).join(',')
-        let check = true
-        for(const o of overlaps){
-            if(key.includes(o)){
-                check = false
-                break
             }
-        }
-        if(check){
-            overlaps.push(key)
-            // console.log('check',ids)
-            return
-        }
+        })
+        if(isMinimality) return keys.length
     }
-    
-    return overlaps.length
 }
-
-console.log(solution(
-    [['a',1,'aaa','c','ng'],['b',1,'bbb','c','g'],['c',1,'aaa','d','ng'],['d',2,'bbb','d','ng']]
-    ))
