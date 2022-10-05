@@ -1,0 +1,16 @@
+{
+  "name": "kakao",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.27.2",
+    "qs": "^6.11.0"
+  }
+}
