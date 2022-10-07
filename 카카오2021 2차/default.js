@@ -1,5 +1,5 @@
 import axios from "axios";
-const X_AUTH_TOKEN = 'b453dff9db67d352bad3bbe06432ce7d'
+const X_AUTH_TOKEN = '7888df51e8eb579ff0dd9be11986f2ed'
 const BASE_URL = 'https://kox947ka1a.execute-api.ap-northeast-2.amazonaws.com/prod/users'
 console.log('start')
 axios.defaults.baseURL = BASE_URL
@@ -77,4 +77,18 @@ const main1 = async () => {
     console.log(score)
 }
 
-await main1()
+const main2 = async () => {
+    const AUTH_KEY_1 = (await createStart(2)).auth_key
+    const HEADER_PROBLEM_1 = {headers:{'Authorization':AUTH_KEY_1}}
+    console.log(HEADER_PROBLEM_1)
+    let {locations} = (await getLocations(HEADER_PROBLEM_1))
+    let time = 0
+    while(time <= 720){
+        time = (await updateSimulate(HEADER_PROBLEM_1,[])).time
+    }
+    
+    const {score} = await getScore(HEADER_PROBLEM_1)
+    console.log(score)
+}
+
+await main2()

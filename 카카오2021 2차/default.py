@@ -44,7 +44,7 @@ def cal_distance(id1, id2):
 
 
 if __name__ == "__main__":
-    start_res = start(1)
+    start_res = start(2)
 
     auth_key = start_res["auth_key"]
     print(auth_key)
@@ -66,6 +66,7 @@ if __name__ == "__main__":
     
     if start_res["problem"] == 1:
         for simul in range(720):
+            print(simul)
             locations_res = locations(auth_key)
             trucks_res = trucks(auth_key)
             truck_commands = []

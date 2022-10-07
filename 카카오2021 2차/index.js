@@ -1,14 +1,13 @@
 import axios from "axios";
-const X_AUTH_TOKEN = 'b453dff9db67d352bad3bbe06432ce7d'
+const X_AUTH_TOKEN = '7888df51e8eb579ff0dd9be11986f2ed'
 const BASE_URL = 'https://kox947ka1a.execute-api.ap-northeast-2.amazonaws.com/prod/users'
-console.log('start')
 axios.defaults.baseURL = BASE_URL
 const START_HEADERS = {headers:{'X-Auth-Token':X_AUTH_TOKEN,'Content-Type':'application/json'}}
-
+// 800 넘기
+// 928
 const createStart = async (problem) => {
     try{
         const {status,data} = await axios.post('/start',{problem},START_HEADERS)
-        console.log(status,data)
         return data
     }catch(err){
         console.log(err)
@@ -27,7 +26,6 @@ const getLocations = async (header) => {
 const getTrucks = async (header) => {
     try{
         const {status, data} = await axios.get('/trucks',header)
-        console.log(status,data)
         return data
     }catch(err){
         console.log(err.response.data)
@@ -52,80 +50,91 @@ const getScore = async (header) => {
     }
 }
 
-const makeTable = (locations,size) => {
-    const bikeTable = new Array(size).fill().map(()=>new Array(size).fill())
+/* { "id": 0, "located_bikes_count": 3 } */
+const makeTableData = (locations,size) => {
+    const table = new Array(size).fill().map(()=>new Array(size).fill())
     let sum = 0
-    const min = []
-    const max = []
     locations.forEach(({id,located_bikes_count}) => {
-        const x = Math.floor(id / size)
-        const y = id - x*size
-        bikeTable[x][y] = located_bikes_count
+        const y = Math.floor(id / size)
+        const x = size - (id - size * y) - 1
+        table[x][y] = located_bikes_count
         sum += located_bikes_count
     })
-    const avg = sum / (size ** 2)
+    const avg = Math.ceil(sum / size ** 2)
+    const min = []
+    const max = []
+
     for(let x = 0; x < size; x++){
         for(let y = 0; y < size; y++){
-            if(bikeTable[x][y] < avg - 1) min.push([x,y,bikeTable[x][y]])
-            else if(bikeTable[x][y] > avg) max.push([x,y,bikeTable[x][y]])
+            if(table[x][y] > avg) max.push([x,y,table[x][y]])
+            else if(table[x][y] < avg) min.push([x,y,table[x][y]])
         }
     }
-    return [bikeTable,max,min,Math.ceil(avg)]
+
+    return {table,max,min,avg}
 }
 
-const makeCommand = (oldX,oldY,newX,newY) => {
+/* { "id": 0, "located_bikes_count": 3 } */
+const makeTableDataV2 = (locations,size,peakReq,peakRes,before) => {
+    const table = new Array(size).fill().map(()=>new Array(size).fill())
+    locations.forEach(({id,located_bikes_count}) => {
+        const y = Math.floor(id / size)
+        const x = size - (id - size * y) - 1
+        table[x][y] = located_bikes_count
+        if(before){
+            if(located_bikes_count - before[x][y] > 0) peakRes[x][y] += located_bikes_count - before[x][y]
+            else peakReq[x][y] += before[x][y] - located_bikes_count
+        }
+    })
+
+    return {table,peakReq,peakRes}
+}
+
+const getMinMoveTruckFor = (trucks,min,max,disAlreadyTrucks) => {
+    let minMove = Infinity
+    let [truckI,maxI,minI] = [-1,0,0]
+    for(const [i,[x1,y1,v1]] of min.entries()){
+        for(const [j,[x2,y2,v2]] of max.entries()){
+            for(const [k,[xt,yt,ct]] of trucks.entries()){
+                if(ct.length) continue
+                if(disAlreadyTrucks.includes(k)) continue
+                const length = getLength(xt,yt,x2,y2) + getLength(x2,y2,x1,y1)
+                if(minMove > length){
+                    minMove = length, minI = i, maxI = j, truckI = k
+                }
+            }
+        }
+    }
+    return {truckI,maxI,minI}
+}
+
+const getLength = (x1,y1,x2,y2) => {
+    return Math.abs(x2 - x1) + Math.abs(y2 - y1)
+}
+
+const makeCommand = (x1,y1,x2,y2) => {
     const command = []
-    const H = newX - oldX
+    const H = x2 - x1
     if(H > 0){
         for(let i = 0; i < H; i++){
+            command.push(3)
+        }
+    }else{
+        for(let i = 0; i < -H; i++){
+            command.push(1)
+        }
+    }
+    const W = y2 - y1
+    if(W > 0){
+        for(let i = 0; i < W; i++){
             command.push(2)
         }
     }else{
-        for(let i = H; i < 0; i++){
+        for(let i = 0; i < -W; i++){
             command.push(4)
         }
     }
-    const W = newY - oldY
-    if(W > 0){
-        for(let i = 0; i < W; i++){
-            command.push(1)
-        }
-    }else{
-        for(let i = W; i < 0; i++){
-            command.push(3)
-        }
-    }
     return command
-}
-
-const findMinMoveTruckFor = (max,min,trucks,avg,usingTrucks) => {
-    let minDistance = Infinity
-    let command = []
-    let truckIdx = 0
-    let maxIdx = 0
-    let minIdx = 0
-    trucks.forEach(([tx,ty,stays],i) => {
-        if(!stays.length && !usingTrucks.includes(i)){
-            max.forEach(([maxx,maxy,bikes],j) => {
-                min.forEach(([minx,miny],k) => {
-                    const move = Math.abs(maxx-tx) + Math.abs(maxy-ty) + Math.abs(maxx-minx) + Math.abs(maxy-miny)
-                    if(move < minDistance){
-                        minDistance = move
-                        const b = bikes - avg
-                        const moveToMax = makeCommand(tx,ty,maxx,maxy)
-                        const getBikes = new Array(b).fill(5)
-                        const moveToMin = makeCommand(maxx,maxy,minx,miny)
-                        const setBikes = new Array(b).fill(6)
-                        command = moveToMax.concat(getBikes).concat(moveToMin).concat(setBikes)
-                        truckIdx = i
-                        maxIdx = j
-                        minIdx = k
-                    }
-                })
-            })
-        }
-    })
-    return {command,truckIdx,maxIdx,minIdx}
 }
 
 /* 
@@ -136,79 +145,154 @@ const findMinMoveTruckFor = (max,min,trucks,avg,usingTrucks) => {
 대여요청은 순차적으로 실행
 명령은 10개까지 가능
 0 가만히
-1 상(우) 2 우(하) 3 하(좌) 4 좌(상) 5 상차 6 하차
+1 상 2 우 3 하 4 좌 5 상차 6 하차
 "commands": [{ "truck_id": 0, "command": [2, 5, 4, 1, 6] }]
 */
 const main1 = async () => {
     const AUTH_KEY_1 = (await createStart(1)).auth_key
     const HEADER_PROBLEM_1 = {headers:{'Authorization':AUTH_KEY_1}}
-    console.log(HEADER_PROBLEM_1)
-    let {locations} = (await getLocations(HEADER_PROBLEM_1))
-    let tableData = makeTable(locations,5)
-    let [bikeTable,max,min,avg] = tableData
-    const truckTable = [[0,0,[]],[0,0,[]],[0,0,[]],[0,0,[]],[0,0,[]]]
-    let time = 0
+
+    const truck = [4,0,[]]
+    const trucks = new Array(5).fill().map(()=>[...truck])
+    let {time} = await updateSimulate(HEADER_PROBLEM_1,[])
     while(time <= 720){
-        while(min.length === 0){
+        let {locations} = (await getLocations(HEADER_PROBLEM_1))
+        let {table,max,min,avg} = makeTableData(locations,5)
+        while(!(min.length && max.length)){
             time = (await updateSimulate(HEADER_PROBLEM_1,[])).time
             locations = (await getLocations(HEADER_PROBLEM_1)).locations
-            tableData = makeTable(locations,5)
-            bikeTable = tableData[0]
-            max = tableData[1]
-            min = tableData[2]
-            avg = tableData[3]
+            const T = makeTableData(locations,5)
+            table = T.table, max = T.max, min = T.min, avg = T.avg
         }
-        console.log(bikeTable)
-        let commands = []
-        truckTable.forEach(([,,command],truckIdx) => {
-            if(command.length === 0){}
-            else{
-                if(command.length < 10){
-                    commands.push({
-                        truck_id:truckIdx,
-                        command:command
-                    })
-                }else {
-                    truckTable[truckIdx][2] = command.slice(10)
-                    commands.push({
-                        truck_id:truckIdx,
-                        command:command.slice(0,10)
-                    })
+        min.sort((a,b) => a[2] - b[2])
+        max.sort((a,b) => b[2] - a[2])
+        const disAlreadyTrucks = []
+        const commands = []
+        while(min.length && max.length && disAlreadyTrucks.length !== 5){
+            const {truckI,maxI,minI} = getMinMoveTruckFor(trucks,min,max,disAlreadyTrucks)
+            if(truckI === -1) break
+            disAlreadyTrucks.push(truckI)
+            const [xt,yt,ct] = trucks[truckI]
+            const [x1,y1,v1] = max[maxI]
+            const [x2,y2,v2] = min[minI]
+            const bikes = Math.min(v1-avg,avg-v2,20)
+            const moveToMax = makeCommand(xt,yt,x1,y1)
+            for(let i = 0; i < bikes; i++) {moveToMax.push(5)}
+            const movetoMin = makeCommand(x1,y1,x2,y2)
+            for(let i = 0; i < bikes; i++) {movetoMin.push(6)}
+            const command = ct.concat(moveToMax).concat(movetoMin)
+            if(command.length > 10){
+                trucks[truckI] = [x2,y2,command.slice(10)]
+                commands.push({ truck_id: truckI, command: command.slice(0,10) })
+            }else{
+                trucks[truckI] = [x2,y2,[]]
+                commands.push({ truck_id: truckI, command: command })
+            }
+            min.splice(minI,1)
+            max.splice(maxI,1)
+        }
+        trucks.forEach(([x,y,command],i) => {
+            if (commands.filter(v => v.truck_id === i).length === 0){
+                if(command.length > 10){
+                    trucks[i] = [x,y,command.slice(10)]
+                    commands.push({ truck_id: i, command: command.slice(0,10) })
+                }else{
+                    trucks[i] = [x,y,[]]
+                    commands.push({ truck_id: i, command: command })
                 }
             }
         })
-        const usingTrucks = []
-        while(min.length){
-            let tCheck = false
-            truckTable.forEach(([,,command],truckIdx) => {
-                if(command.length === 0) tCheck = true
-            })
-            if(!tCheck) break
-            if(usingTrucks.length === 5) break
-            let {command,truckIdx,maxIdx,minIdx} = findMinMoveTruckFor(max,min,truckTable,avg,usingTrucks)
-            usingTrucks.push(truckIdx)
-            if(command.length < 10){
-                truckTable[truckIdx] = min[minIdx].slice(0,2).concat([[]])
-                commands.push({
-                    truck_id:truckIdx,
-                    command:command
-                })
-            }else{
-                truckTable[truckIdx] = min[minIdx].slice(0,2).concat([command.slice(10)])
-                commands.push({
-                    truck_id:truckIdx,
-                    command:command.slice(0,10)
-                })
-            }
-            max.splice(maxIdx,1)
-            min.splice(minIdx,1)
-        }
         time = (await updateSimulate(HEADER_PROBLEM_1,commands)).time
-        commands = []
     }
     
     const {score} = await getScore(HEADER_PROBLEM_1)
-    console.log(score)
+    return score
 }
 
-await main1()
+const main2 = async () => {
+    const AUTH_KEY_2 = (await createStart(2)).auth_key
+    const HEADER_PROBLEM_2 = {headers:{'Authorization':AUTH_KEY_2}}
+
+    const truck = [59,0,[]]
+    const trucks = new Array(10).fill().map(()=>[...truck])
+    let {time} = await updateSimulate(HEADER_PROBLEM_2,[])
+    let peakReq = new Array(60).fill().map(() => new Array(60).fill(0))
+    let peakRes = new Array(60).fill().map(() => new Array(60).fill(0))
+    let before = new Array(60).fill().map(() => new Array(60).fill(3))
+    while(time <= 30){
+        let {locations} = (await getLocations(HEADER_PROBLEM_2))
+        let tableData = makeTableDataV2(locations,60,peakReq,peakRes,before)
+        before = tableData.table
+        peakReq = tableData.peakReq
+        peakRes = tableData.peakRes
+        
+        let {table,max,min,avg} = makeTableData(locations,60)
+        while(!(min.length && max.length)){
+            time = (await updateSimulate(HEADER_PROBLEM_2,[])).time
+            locations = (await getLocations(HEADER_PROBLEM_2)).locations
+            const T = makeTableData(locations,60)
+            table = T.table, max = T.max, min = T.min, avg = T.avg
+        }
+        min.sort((a,b) => a[2] - b[2])
+        max.sort((a,b) => b[2] - a[2])
+        const disAlreadyTrucks = []
+        const commands = []
+        while(min.length && max.length && disAlreadyTrucks.length !== 10){
+            const {truckI,maxI,minI} = getMinMoveTruckFor(trucks,min,max,disAlreadyTrucks)
+            if(truckI === -1) break
+            disAlreadyTrucks.push(truckI)
+            const [xt,yt,ct] = trucks[truckI]
+            const [x1,y1,v1] = max[maxI]
+            const [x2,y2,v2] = min[minI]
+            const bikes = Math.min(v1-avg,avg-v2,20)
+            const moveToMax = makeCommand(xt,yt,x1,y1)
+            for(let i = 0; i < bikes; i++) {moveToMax.push(5)}
+            const movetoMin = makeCommand(x1,y1,x2,y2)
+            for(let i = 0; i < bikes; i++) {movetoMin.push(6)}
+            const command = ct.concat(moveToMax).concat(movetoMin)
+            if(command.length > 10){
+                trucks[truckI] = [x2,y2,command.slice(10)]
+                commands.push({ truck_id: truckI, command: command.slice(0,10) })
+            }else{
+                trucks[truckI] = [x2,y2,[]]
+                commands.push({ truck_id: truckI, command: command })
+            }
+            min.splice(minI,1)
+            max.splice(maxI,1)
+        }
+        trucks.forEach(([x,y,command],i) => {
+            if (commands.filter(v => v.truck_id === i).length === 0){
+                if(command.length > 10){
+                    trucks[i] = [x,y,command.slice(10)]
+                    commands.push({ truck_id: i, command: command.slice(0,10) })
+                }else{
+                    trucks[i] = [x,y,[]]
+                    commands.push({ truck_id: i, command: command })
+                }
+            }
+        })
+        time = (await updateSimulate(HEADER_PROBLEM_2,commands)).time
+    }
+    let maxReq = 0
+    let reqSum = 0
+    peakReq.forEach((Q) => Q.forEach((q) => {
+        if(maxReq < q) maxReq = q
+        reqSum += q
+    }))
+    let maxRes = 0
+    let resSum = 0
+    peakRes.forEach((S) => S.forEach((s) => {
+        if(maxRes < s) maxRes = s
+        resSum += s
+    }))
+    reqSum /= 60**2
+    resSum /= 60**2
+    console.log({maxReq,maxRes,reqSum,resSum})
+    const {score} = await getScore(HEADER_PROBLEM_2)
+    return score
+}
+
+// const score1 = await main1()
+const score2 = await main2()
+
+console.log('my score: ', score2)
