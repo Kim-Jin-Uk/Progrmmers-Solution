@@ -1,12 +1,13 @@
 function solution(arrayA, arrayB) {
   arrayA.sort((a, b) => a - b);
   arrayB.sort((a, b) => a - b);
-  return Math.max(result(arrayA, arrayB), result(arrayB, arrayA));
-}
-function result(A, B) {
-  for (let i = A[0]; i > 1; i--) {
-    // A는 모두 나누고 B는 모두 나눌 수 없는 케이스
-    if (A.every((a) => a % i === 0) && !B.some((b) => b % i === 0)) return i;
-  }
-  return 0;
+  // curr은 모두 나누고 target은 모두 나눌 수 없는 최대값을 도출하는 함수 입니다
+  const findA = (curr, target) => {
+    for (let i = curr[0]; i > 0; i--) {
+      if (curr.every((v) => v % i === 0) && !target.some((v) => v % i === 0))
+        return i;
+    }
+    return 0;
+  };
+  return Math.max(findA(arrayA, arrayB), findA(arrayB, arrayA));
 }
